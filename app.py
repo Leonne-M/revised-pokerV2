@@ -62,6 +62,18 @@ def trial():
 
 player_hand_ids=[]
 computer_hand_ids=[]
+@app.route("/deal_cards", methods=["POST"])
+def add_cards():
+    from models import Card
+    body=request.get_json
+    suit=body['suit']
+    rank=body['rank']
+    image=body['image']
+    new_card=Card(suits=suit,rank=rank,image=image)
+    db.session.add(new_card)
+    db.session.commit()
+    return jsonify({"message": "Card added successfully"})
+
 
 @app.route("/get_cards", methods=["GET"])
 @jwt_required()
@@ -97,6 +109,8 @@ def get_cards():
 def player_moves():
    from models import Card
    from models import Game
+   deck=Card.query.all()
+   random.shuffle(deck)
    body=request.get_json()
    id=body['id']
    rank=body['rank']
@@ -104,6 +118,8 @@ def player_moves():
    current_user = get_jwt_identity()
    player_game=Game.query.filter_by(id=current_user.id).first()
    player_hand=[]
+   new_id=[]
+   new_player_hand=[]
    playercards_id=player_game.player_hand
    last_played=player_game.lastplayed_move
    if rank ==last_played[0] or suit==last_played[1]:
@@ -112,7 +128,18 @@ def player_moves():
         db.session.commit()
         for id in player_game.player_hand:
          player_hand.append(Card.query.filter_by(id=id).first())
-   return jsonify({"message": "Successful move","player_hand": player_hand})
+        return jsonify({"message": "Successful move","player_hand": player_hand})
+   if rank =="pick"and suit =="pick":
+       for id in player_game.player_hand:
+         player_hand.append(Card.query.filter_by(id=id).first())
+         player_hand.append(deck.pop())
+       for cards in player_hand:
+                new_id.append(cards.id)
+       player_game.player_hand=new_id
+       db.session.commit()
+       return jsonify(player_hand)
+
+    
 @app.route("/computer_moves",methods=["GET"])   
 @jwt_required()
 def computer_moves():
@@ -143,14 +170,12 @@ def computer_moves():
                 new_computer_hand.append(Card.query.filter_by(id=id).first())
             return jsonify(new_computer_hand)
         if not playable:
-            computer_hand.append(deck.pop)
+            computer_hand.append(deck.pop())
             for cards in computer_hand:
                 new_id.append(cards.id)
                 player_game.computer_hand=new_id
                 db.session.commit()
-                for id in player_game.computer_hand:
-                 new_computer_hand.append(Card.query.filter_by(id=id).first())
-                return jsonify(new_computer_hand)
+                return jsonify(computer_hand)
 
 if __name__ == "__main__":
     app.run(debug=True)
