@@ -5,6 +5,7 @@ from flask_jwt_extended import JWTManager,create_access_token,jwt_required,get_j
 from flask_migrate import Migrate
 from config import Config
 from models import db
+import random
 
 migrate = Migrate()
 jwt=JWTManager()
@@ -57,6 +58,99 @@ def trial():
     print(current_user)
     user=User.query.filter_by(id=current_user['id']).first()
     return {"message":f"Hello {user.name} You are authorized to access this endpoint."}
+
+
+player_hand_ids=[]
+computer_hand_ids=[]
+
+@app.route("/get_cards", methods=["GET"])
+@jwt_required()
+def get_cards():
+    from models import Game
+    from models import Card
+    current_user = get_jwt_identity()
+    deck=Card.query.all()
+    random.shuffle(deck)
+    player_hand=[]
+    computer_hand=[]
+    for i in range(4):
+        player_hand.append(deck.pop())
+        computer_hand.append(deck.pop())
+    player_hand_ids = [card.id for card in player_hand]
+    computer_hand_ids = [card.id for card in computer_hand]
+    suits = ['Hearts', 'Diamonds', 'Clubs', 'Spades']
+    newranks=['4', '5', '6', '7', '9', '10']
+    newdeck=[(newrank,suit)for suit in suits for newrank in newranks]
+    played=[random.choice(newdeck)]
+    new_game = Game(
+        lastplayed_move=played,
+        player_id=current_user['id'],
+        player_hand=player_hand_ids,
+        computer_hand=computer_hand_ids
+    )
+    db.session.add(new_game)
+    db.session.commit()
+    
+    return jsonify({"player_hand": player_hand,"computer_hand": computer_hand})
+@app.route("/player_moves", methods=["POST"])
+@jwt_required()
+def player_moves():
+   from models import Card
+   from models import Game
+   body=request.get_json()
+   id=body['id']
+   rank=body['rank']
+   suit=body['suit']
+   current_user = get_jwt_identity()
+   player_game=Game.query.filter_by(id=current_user.id).first()
+   player_hand=[]
+   playercards_id=player_game.player_hand
+   last_played=player_game.lastplayed_move
+   if rank ==last_played[0] or suit==last_played[1]:
+        player_game.player_hand = [card_id for card_id in playercards_id if card_id != id]
+        player_game.lastplayed_move=(rank,suit)
+        db.session.commit()
+        for id in player_game.player_hand:
+         player_hand.append(Card.query.filter_by(id=id).first())
+   return jsonify({"message": "Successful move","player_hand": player_hand})
+@app.route("/computer_moves",methods=["GET"])   
+@jwt_required()
+def computer_moves():
+    from models import Game
+    from models import Card
+    current_user=get_jwt_identity()
+    deck=Card.query.all()
+    random.shuffle(deck)
+    player_game=Game.query.filter_by(id=current_user.id).first()  
+    computer_id=player_game.computer_hand
+    computer_hand=[]
+    playable=[]
+    new_id=[]
+    new_computer_hand=[]
+    for id in computer_id:
+        computer_hand.append(Card.query.filter_by(id=id).first())
+    last_played=player_game.lastplayed_move
+    for i in range(len(computer_hand)):
+        if computer_hand[i]["rank"]==last_played[0] or computer_hand[i]["rank"]==last_played[1]:
+            playable.append(computer_hand[i])
+            playing=random.choice(playable)
+            rank=playing['rank']
+            suit=playing['suit']
+            player_game.lastplayed_move=(rank,suit)
+            player_game.computer_hand = [card_id for card_id in computer_id if card_id!= playing.id]
+            db.session.commit()
+            for id in player_game.computer_hand:
+                new_computer_hand.append(Card.query.filter_by(id=id).first())
+            return jsonify(new_computer_hand)
+        if not playable:
+            computer_hand.append(deck.pop)
+            for cards in computer_hand:
+                new_id.append(cards.id)
+                player_game.computer_hand=new_id
+                db.session.commit()
+                for id in player_game.computer_hand:
+                 new_computer_hand.append(Card.query.filter_by(id=id).first())
+                return jsonify(new_computer_hand)
 
 if __name__ == "__main__":
     app.run(debug=True)
