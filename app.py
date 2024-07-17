@@ -163,8 +163,8 @@ def computer_moves():
     from models import Card
     current_user=get_jwt_identity()
     deck=Card.query.all()
-    random.shuffle(deck)
-    player_game=Game.query.filter_by(id=current_user.id).first()  
+    random.shuffle(deck)  
+    player_game=Game.query.filter_by(player_id=current_user["id"]).first()
     computer_id=player_game.computer_hand
     computer_hand=[]
     playable=[]
@@ -172,10 +172,11 @@ def computer_moves():
     new_computer_hand=[]
     for id in computer_id:
         computer_hand.append(Card.query.filter_by(id=id).first())
-    last_played=player_game.lastplayed_move
-    for i in range(len(computer_hand)):
-        if computer_hand[i]["rank"]==last_played[0] or computer_hand[i]["suit"]==last_played[1]:
-            playable.append(computer_hand[i])
+    last_played=json.loads(player_game.lastplayed_move)
+    print (computer_hand)
+    for card in computer_hand:
+        if card.rank == last_played[0] or card.suits == last_played[1]:
+            playable.append(card)
             playing=random.choice(playable)
             rank=playing['rank']
             suit=playing['suit']
@@ -184,14 +185,17 @@ def computer_moves():
             db.session.commit()
             for id in player_game.computer_hand:
                 new_computer_hand.append(Card.query.filter_by(id=id).first())
-            return jsonify(new_computer_hand)
+            return jsonify({
+            "message": "Successful move",
+            "computer_hand": [serialize_card(card) for card in new_computer_hand]
+        })
         if not playable:
             computer_hand.append(deck.pop())
             for cards in computer_hand:
                 new_id.append(cards.id)
                 player_game.computer_hand=new_id
                 db.session.commit()
-                return jsonify(computer_hand)
+                return jsonify({"computer_hand": [serialize_card(card) for card in computer_hand]})
 
 if __name__ == "__main__":
     app.run(debug=True)
