@@ -22,4 +22,10 @@ class Card(db.Model):
     rank=db.Column(db.String(255),nullable=False)
     image=db.Column(db.String(255),nullable=False)
     
-
+def serialize_card(card):
+    return {
+        "id": card.id,
+        "suits": card.suits,
+        "rank": card.rank,
+        "image": card.image
+    }

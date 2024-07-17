@@ -4,8 +4,9 @@ from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager,create_access_token,jwt_required,get_jwt_identity
 from flask_migrate import Migrate
 from config import Config
-from models import db
+from models import db,serialize_card
 import random
+import json
 
 migrate = Migrate()
 jwt=JWTManager()
@@ -62,7 +63,7 @@ def trial():
 
 player_hand_ids=[]
 computer_hand_ids=[]
-@app.route("/deal_cards", methods=["POST"])
+@app.route("/add_cards", methods=["POST"])
 def add_cards():
     from models import Card
     body=request.get_json
@@ -73,7 +74,6 @@ def add_cards():
     db.session.add(new_card)
     db.session.commit()
     return jsonify({"message": "Card added successfully"})
-
 
 @app.route("/get_cards", methods=["GET"])
 @jwt_required()
@@ -103,7 +103,11 @@ def get_cards():
     db.session.add(new_game)
     db.session.commit()
     
-    return jsonify({"player_hand": player_hand,"computer_hand": computer_hand})
+    return jsonify({
+        "player_hand": [serialize_card(card) for card in player_hand],
+        "computer_hand": [serialize_card(card) for card in computer_hand]
+    })
+
 @app.route("/player_moves", methods=["POST"])
 @jwt_required()
 def player_moves():
@@ -115,29 +119,41 @@ def player_moves():
    id=body['id']
    rank=body['rank']
    suit=body['suit']
-   current_user = get_jwt_identity()
-   player_game=Game.query.filter_by(id=current_user.id).first()
-   player_hand=[]
+   current_user= get_jwt_identity()
+   player_game=Game.query.filter_by(player_id=current_user["id"]).first()
+   print (player_game)
+   player_hands=[]
    new_id=[]
    new_player_hand=[]
    playercards_id=player_game.player_hand
-   last_played=player_game.lastplayed_move
+   last_played=json.loads(player_game.lastplayed_move)
+   print (type(last_played))
+   print (last_played)
+   print (last_played[0])
+   print (last_played[1])
+#    print (rank)
+#    print (suit)
    if rank ==last_played[0] or suit==last_played[1]:
         player_game.player_hand = [card_id for card_id in playercards_id if card_id != id]
         player_game.lastplayed_move=(rank,suit)
         db.session.commit()
         for id in player_game.player_hand:
-         player_hand.append(Card.query.filter_by(id=id).first())
-        return jsonify({"message": "Successful move","player_hand": player_hand})
+         player_hands.append(Card.query.filter_by(id=id).first())
+        return jsonify({
+            "message": "Successful move",
+            "player_hand": [serialize_card(card) for card in player_hands]
+        })
    if rank =="pick"and suit =="pick":
        for id in player_game.player_hand:
-         player_hand.append(Card.query.filter_by(id=id).first())
-         player_hand.append(deck.pop())
-       for cards in player_hand:
+         player_hands.append(Card.query.filter_by(id=id).first())
+         player_hands.append(deck.pop())
+       for cards in player_hands:
                 new_id.append(cards.id)
        player_game.player_hand=new_id
        db.session.commit()
-       return jsonify(player_hand)
+
+       return jsonify({"player_hand": [serialize_card(card) for card in player_hands]})
+   return jsonify([])
 
     
 @app.route("/computer_moves",methods=["GET"])   
@@ -158,7 +174,7 @@ def computer_moves():
         computer_hand.append(Card.query.filter_by(id=id).first())
     last_played=player_game.lastplayed_move
     for i in range(len(computer_hand)):
-        if computer_hand[i]["rank"]==last_played[0] or computer_hand[i]["rank"]==last_played[1]:
+        if computer_hand[i]["rank"]==last_played[0] or computer_hand[i]["suit"]==last_played[1]:
             playable.append(computer_hand[i])
             playing=random.choice(playable)
             rank=playing['rank']
