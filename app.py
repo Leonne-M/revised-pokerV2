@@ -168,44 +168,47 @@ def player_moves():
 def computer_moves():
     from models import Game
     from models import Card
-    current_user=get_jwt_identity()
     deck=Card.query.all()
-    random.shuffle(deck)  
-    player_game=Game.query.filter_by(player_id=current_user["id"]).first()
-    computer_id=player_game.computer_hand
-    computer_hand=[]
-    playable=[]
-    new_id=[]
-    new_computer_hand=[]
-    for id in computer_id:
-        computer_hand.append(Card.query.filter_by(id=id).first())
-    print(computer_hand)
-    last_played=json.loads(player_game.lastplayed_move)
-    print (computer_hand)
-    for card in computer_hand:
-        if card.rank == last_played[0] or card.suits == last_played[1]:
-            playable.append(card)
-            playing=random.choice(playable)
-            rank=playing[0]
-            suit=playing[1]
-            player_game.lastplayed_move=(rank,suit)
-            player_game.computer_hand = [card_id for card_id in computer_id if card_id!= playing.id]
-            print(player_game.computer_hand)
-            db.session.commit()
-            for id in player_game.computer_hand:
-                new_computer_hand.append(Card.query.filter_by(id=id).first())
-            print(new_computer_hand)
-            return jsonify({
+    current_user = get_jwt_identity()
+    player_game = Game.query.filter_by(player_id=current_user["id"]).first()
+
+    if not player_game:
+        return jsonify({"message": "Game not found"}), 404
+
+    computer_id = player_game.computer_hand
+    computer_hand = [Card.query.get(id) for id in computer_id]
+
+    last_played = json.loads(player_game.lastplayed_move)
+
+    playable = [card for card in computer_hand if card.rank == last_played[0] or card.suits == last_played[1]]
+
+    if playable:
+        playing = random.choice(playable)
+        rank = playing.rank
+        suits = playing.suits
+        player_game.lastplayed_move = (rank, suits)
+        player_game.computer_hand = [card.id for card in computer_hand if card.id != playing.id]
+        db.session.commit()
+
+        new_computer_hand = [Card.query.get(id) for id in player_game.computer_hand]
+        return jsonify({
             "message": "Successful move",
             "computer_hand": [serialize_card(card) for card in new_computer_hand]
         })
-        if not playable:
-            computer_hand.append(deck.pop())
-            for cards in computer_hand:
-                new_id.append(cards.id)
-                player_game.computer_hand=new_id
-                db.session.commit()
-                return jsonify({"computer_hand": [serialize_card(card) for card in computer_hand]})
+
+    else:
+        if deck:
+            new_card = deck.pop()
+            player_game.computer_hand.append(new_card.id)
+            db.session.commit()
+
+            new_computer_hand = [Card.query.get(id) for id in player_game.computer_hand]
+            return jsonify({
+                "message": "No playable cards, drew from deck",
+                "computer_hand": [serialize_card(card) for card in new_computer_hand]
+            })
+        else:
+            return jsonify({"message": "No playable cards and no cards left in the deck"})
 
 if __name__ == "__main__":
     app.run(debug=True)
