@@ -128,57 +128,45 @@ def get_cards():
 @app.route("/player_moves", methods=["POST"])
 @jwt_required()
 def player_moves():
-    from models import Card, Game
-    import random, json
-
-    deck = Card.query.all()
-    random.shuffle(deck)
-    body = request.get_json()
-    id = body['id']
-    rank = body['rank']
-    suits = body['suits']
-    current_user = get_jwt_identity()
-    player_game = Game.query.filter_by(player_id=current_user["id"]).first()
-    print(player_game)
-    print(id)
-
-    if not player_game:
-        return jsonify({"player_hand": []}), 404
-
-    player_hands = []
-    new_id = []
-    new_lastplayed_card = []
-    playercards_id = player_game.player_hand
-    last_played = json.loads(player_game.lastplayed_move)
-    print(last_played)
-
-    if rank == last_played[0] or suits == last_played[1]:
+   from models import Card
+   from models import Game
+   deck=Card.query.all()
+   random.shuffle(deck)
+   body=request.get_json()
+   id=body['id']
+   rank=body['rank']
+   suits=body['suits']
+   current_user= get_jwt_identity()
+   player_game=Game.query.filter_by(player_id=current_user["id"]).first()
+   print (player_game)
+   player_hands=[]
+   new_id=[]
+   new_lastplayed_card = []
+   playercards_id=player_game.player_hand
+   last_played=json.loads(player_game.lastplayed_move)
+   if rank ==last_played[0] or suits==last_played[1]:
         player_game.player_hand = [card_id for card_id in playercards_id if card_id != id]
-        player_game.lastplayed_move = (rank, suits)
+        player_game.lastplayed_move=(rank,suits)
         db.session.commit()
-        new_lastplayed_card.append(Card.query.filter_by(id=body['id']).first())
+        new_lastplayed_card.append(Card.query.filter_by(id=id).first())
         for id in player_game.player_hand:
-            player_hands.append(Card.query.filter_by(id=id).first())
-            
+         player_hands.append(Card.query.filter_by(id=id).first())
         return jsonify({
             "message": "Successful move",
             "player_hand": [serialize_card(card) for card in player_hands],
             "new_lastplayed_card":[serialize_card(card) for card in new_lastplayed_card]
         })
+   if id=="0" and rank =="pick"and suits =="pick":
+       for id in player_game.player_hand:
+         player_hands.append(Card.query.filter_by(id=id).first())
+       player_hands.append(deck.pop())
+       for cards in player_hands:
+                new_id.append(cards.id)
+       player_game.player_hand=new_id
+       db.session.commit()
 
-    if id=="0"and  rank == "pick" and suits == "pick":
-        for id in player_game.player_hand:
-            player_hands.append(Card.query.filter_by(id=id).first())
-        
-        player_hands.append(deck.pop())
-        for cards in player_hands:
-            new_id.append(cards.id)
-        player_game.player_hand = new_id
-        db.session.commit()
-
-        return jsonify({"player_hand": [serialize_card(card) for card in player_hands]})
-    
-    return jsonify({"player_hand": []})
+       return jsonify({"player_hand": [serialize_card(card) for card in player_hands]})
+   return jsonify([])
 
 
 @app.route("/computer_moves", methods=["GET"])
@@ -219,12 +207,14 @@ def computer_moves():
         })
 
     else:
-        if deck:
             new_card = deck.pop()
-            player_game.computer_hand.append(new_card.id)
-            db.session.commit()
 
             new_computer_hand = [Card.query.get(id) for id in player_game.computer_hand]
+            new_computer_hand.append(new_card)
+            player_game.computer_hand = [card.id for card in new_computer_hand ]
+
+            db.session.commit()
+
 
             return jsonify({
                 "message": "No playable cards, drew from deck",
