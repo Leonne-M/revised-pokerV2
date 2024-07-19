@@ -89,9 +89,23 @@ def get_cards():
     if existing_game:
         player_hand_ids = existing_game.player_hand
         computer_hand_ids = existing_game.computer_hand
+        last_played=json.loads(existing_game.lastplayed_move)
+        print(last_played)
+        print(last_played[0])
+        print(last_played[1])
+        card = Card.query.filter_by(rank=last_played[0], suits=last_played[1]).first()
+        new_last_played_card.append(card)
+        print(new_last_played_card)
+
         
-        player_hand = [Card.query.get(card_id) for card_id in player_hand_ids]
-        computer_hand = [Card.query.get(card_id) for card_id in computer_hand_ids]
+        player_hand = [Card.query.filter_by(id=card_id).first() for card_id in player_hand_ids]
+        computer_hand = [Card.query.filter_by(id=card_id).first() for card_id in computer_hand_ids]
+        return jsonify({
+        "player_hand": [serialize_card(card) for card in player_hand],
+        "computer_hand": [serialize_card(card) for card in computer_hand],
+        "new_last_played_card":[serialize_card(card) for card in new_last_played_card]
+    })
+
 
     else:
      deck=Card.query.all()
@@ -207,8 +221,8 @@ def computer_moves():
         })
 
     else:
+            random.shuffle(deck)
             new_card = deck.pop()
-
             new_computer_hand = [Card.query.get(id) for id in player_game.computer_hand]
             new_computer_hand.append(new_card)
             player_game.computer_hand = [card.id for card in new_computer_hand ]
